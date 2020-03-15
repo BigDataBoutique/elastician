@@ -1,0 +1,34 @@
+image: docker:stable
+
+stages:
+  - build
+  - release
+
+variables:
+  STAGING_REGISTRY: "registry.gitlab.com"
+  CONTAINER_TEST_IMAGE: ${STAGING_REGISTRY}/bigdataboutique/${CI_PROJECT_NAME}:${CI_COMMIT_SHA}
+  CONTAINER_LATEST_IMAGE: ${STAGING_REGISTRY}/bigdataboutique/${CI_PROJECT_NAME}:latest
+
+build:
+  stage: build
+  before_script:
+    - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $STAGING_REGISTRY
+  services:
+    - docker:dind
+  script:
+    - docker build -t $CONTAINER_TEST_IMAGE .
+    - docker push $CONTAINER_TEST_IMAGE
+
+release:
+  stage: release
+  services:
+    - docker:dind
+  before_script:
+    - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $STAGING_REGISTRY
+  script:
+    - docker pull $CONTAINER_TEST_IMAGE
+    - docker tag $CONTAINER_TEST_IMAGE $CONTAINER_LATEST_IMAGE
+    - docker push $CONTAINER_LATEST_IMAGE
+  only:
+    - master
+
