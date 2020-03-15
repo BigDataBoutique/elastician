@@ -1,3 +1,3 @@
 #!/bin/bash
 
-python elastician/tools.py "$@"
+python /usr/src/app/elastician/tools.py "$@"
