@@ -7,7 +7,7 @@ A set of tools to easily develop and manage Elasticsearch and the Elastic Stack
 Get from Docker Hub:
 
 ```bash
-# TODO
+docker pull bigdataboutique/elastician
 ```
 
 Build locally:
@@ -21,11 +21,11 @@ docker build .
 ### Dump an index to a file
 
 ```bash
-docker run  -v `pwd`:/data --rm elastician python elastician/tools.py dump myindex --hosts http://10.63.246.27:9200
+docker run  -v `pwd`:/data --rm bigdataboutique/elastician dump myindex --hosts http://10.63.246.27:9200
 ``` 
 
 ### Upload file and ingest it into an index 
 
 ```bash
-docker run  -v `pwd`:/data --rm elastician python elastician/tools.py ingest myindex_dump.jsonl.gz myindex --hosts http://10.63.246.27:9200
+docker run  -v `pwd`:/data --rm bigdataboutique/elastician ingest myindex_dump.jsonl.gz myindex --hosts http://10.63.246.27:9200
 ```
