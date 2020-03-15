@@ -23,3 +23,9 @@ docker build .
 ```bash
 docker run  -v `pwd`:/data --rm elastician python elastician/tools.py dump myindex --hosts http://10.63.246.27:9200
 ``` 
+
+### Upload file and ingest it into an index 
+
+```bash
+docker run  -v `pwd`:/data --rm elastician python elastician/tools.py ingest myindex_dump.jsonl.gz myindex --hosts http://10.63.246.27:9200
+```
