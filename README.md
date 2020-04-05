@@ -29,3 +29,9 @@ docker run  -v `pwd`:/data --rm bigdataboutique/elastician dump myindex --hosts 
 ```bash
 docker run  -v `pwd`:/data --rm bigdataboutique/elastician ingest myindex_dump.jsonl.gz myindex --hosts http://10.63.246.27:9200
 ```
+
+### Copy index between clusters
+
+```bash
+docker run  --rm bigdataboutique/elastician copy source_index_name http://target-cluster:9200 --hosts http://10.63.246.27:9200
+```
