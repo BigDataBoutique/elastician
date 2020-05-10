@@ -92,6 +92,7 @@ def copy(index, target, hosts):
 
 def copy_func(index, es_target, es_source):
     docs = helpers.scan(es_source, index=index,
+                        query={"sort": ["_doc"]},
                         scroll=u'1m', raise_on_error=True, preserve_order=False)
 
     indexer = helpers.streaming_bulk(es_target, (dict(
