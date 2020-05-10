@@ -22,7 +22,8 @@ def get_es_hosts(hosts):
     es_hosts = hosts or os.getenv('ES_HOSTS') or 'localhost:9200'
     return es_hosts.split(',')
 
-def delete_func(index,es_source):
+
+def delete_func(index, es_source):
     try:
         es_source.indices.delete(index)
     except elasticsearch.exceptions.NotFoundError:
@@ -34,7 +35,8 @@ def delete_func(index,es_source):
 @click.option('--hosts')
 def dump(index, hosts):
     es_source = Elasticsearch(hosts=get_es_hosts(hosts))
-    dump_func(index,es_source)
+    dump_func(index, es_source)
+
 
 def dump_func(index, es_source):
     with gzip.open(index + '_dump.jsonl.gz', mode='wb') as out:
@@ -54,8 +56,7 @@ def dump_func(index, es_source):
 @click.argument('out_filename')
 @click.argument('target')
 @click.option('--hosts')
-
-def copy_cluster(in_filename,out_filename,target,hosts):
+def copy_cluster(in_filename, out_filename, target, hosts):
     es_source = Elasticsearch(hosts=get_es_hosts(hosts))
     es_target = Elasticsearch(hosts=get_es_hosts(target))
     with open(out_filename, 'w') as out_file, open(in_filename, newline='') as in_file:
@@ -69,14 +70,15 @@ def copy_cluster(in_filename,out_filename,target,hosts):
                 cur_index, cur_op, to_del = row
             ok = False
             if cur_op == "copy":
-                ok = copy_func(cur_index,es_target,es_source)
+                ok = copy_func(cur_index, es_target, es_source)
             elif cur_op == "dump":
-                ok = dump_func(cur_index,es_source)
+                ok = dump_func(cur_index, es_source)
             if ok is False:
                 return
             if to_del == "X":
-                delete_func(cur_index,es_source)
+                delete_func(cur_index, es_source)
             writer.writerow(row)
+
 
 @cli.command()
 @click.argument('index')
@@ -86,6 +88,7 @@ def copy(index, target, hosts):
     es_source = Elasticsearch(hosts=get_es_hosts(hosts))
     es_target = Elasticsearch(hosts=get_es_hosts(target))
     copy_func(index, es_target, es_source)
+
 
 def copy_func(index, es_target, es_source):
     docs = helpers.scan(es_source, index=index,
@@ -103,6 +106,7 @@ def copy_func(index, es_target, es_source):
         click.echo(f'Error copying index {index}: Not Found', err=True)
         return False
     return True
+
 
 @cli.command()
 @click.argument('path')
