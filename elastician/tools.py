@@ -117,14 +117,18 @@ def copy_func(index, es_target, es_source):
 @click.argument('path')
 @click.argument('index')
 @click.option('--hosts')
-def ingest(path, index, hosts):
+@click.option('--preserve-index/--no-preserve-index', default=True)
+@click.option('--preserve-ids/--no-preserve-ids', default=False)
+def ingest(path, index, hosts, preserve_index, preserve_ids):
     es = Elasticsearch(hosts=get_es_hosts(hosts))
     with gzip.open(path, mode='rb') as f:
+        objs = [json.loads(line.decode(encoding='UTF-8')) for line in f]
         it = helpers.streaming_bulk(es, (dict(
-            _index=index,
+            _index=index if not preserve_index else o['_index'],
             _type='_doc',
+            _id=None if not preserve_ids else o['_id'],
             _op_type="index",
-            **(json.loads(line.decode(encoding='UTF-8')))) for line in f))
+            **(o['_source'])) for o in objs))
         for ok, response in it:
             if not ok:
                 click.echo(f'Error indexing to {index}: response is {response}', err=True)
