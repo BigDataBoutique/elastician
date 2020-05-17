@@ -43,8 +43,12 @@ def dump_func(index, es_source):
         try:
             for d in tqdm(helpers.scan(es_source, index=index,
                                        scroll=u'1m', raise_on_error=True, preserve_order=False)):
-                source = d['_source']
-                out.write(("%s\n" % json.dumps(source, ensure_ascii=False)).encode(encoding='UTF-8'))
+                out.write(("%s\n" % json.dumps({
+                    '_source': d['_source'],
+                    '_index': d['_index'],
+                    '_type': d['_type'],
+                    '_id': d['_id'],
+                }, ensure_ascii=False)).encode(encoding='UTF-8'))
         except elasticsearch.exceptions.NotFoundError:
             click.echo(f'Error dumping index {index}: Not Found', err=True)
             return False
