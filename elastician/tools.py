@@ -33,16 +33,17 @@ def delete_func(index, es_source):
 @cli.command()
 @click.argument('index')
 @click.option('--hosts')
-def dump(index, hosts):
+@click.option('--timeout', default=u'1m')
+def dump(index, hosts, timeout):
     es_source = Elasticsearch(hosts=get_es_hosts(hosts))
-    dump_func(index, es_source)
+    dump_func(index, es_source, timeout)
 
 
-def dump_func(index, es_source):
+def dump_func(index, es_source, timeout):
     with gzip.open(index + '_dump.jsonl.gz', mode='wb') as out:
         try:
             for d in tqdm(helpers.scan(es_source, index=index,
-                                       scroll=u'1m', raise_on_error=True, preserve_order=False)):
+                                       scroll=timeout, raise_on_error=True, preserve_order=False)):
                 out.write(("%s\n" % json.dumps({
                     '_source': d['_source'],
                     '_index': d['_index'],
@@ -60,7 +61,8 @@ def dump_func(index, es_source):
 @click.argument('out_filename')
 @click.argument('target')
 @click.option('--hosts')
-def copy_cluster(in_filename, out_filename, target, hosts):
+@click.option('--timeout', default=u'1m')
+def copy_cluster(in_filename, out_filename, target, hosts, timeout):
     es_source = Elasticsearch(hosts=get_es_hosts(hosts))
     es_target = Elasticsearch(hosts=get_es_hosts(target))
     with open(out_filename, 'w') as out_file, open(in_filename, newline='') as in_file:
@@ -76,7 +78,7 @@ def copy_cluster(in_filename, out_filename, target, hosts):
             if cur_op == "copy":
                 ok = copy_func(cur_index, es_target, es_source)
             elif cur_op == "dump":
-                ok = dump_func(cur_index, es_source)
+                ok = dump_func(cur_index, es_source, timeout)
             if ok is False:
                 return
             if to_del == "X":
