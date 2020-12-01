@@ -141,7 +141,9 @@ def copy_cluster(in_filename, out_filename, target, source,delete_timeout,error_
         return
     es_source = get_es(source, crtfile_source, verify_cert_source)
     es_target = get_es(target, crtfile_target, verify_cert_target)
-    trans_list = transformations.split(",")
+    trans_list = []
+    if transformations  is not None:
+        trans_list = transformations.split(",")
     #TODO override ES's behavior to use localhost as a default
     with open(out_filename, 'w') as out_file, open(in_filename, newline='') as in_file:
         reader = csv.reader(in_file, delimiter=',', quotechar='|')
@@ -191,7 +193,9 @@ def copy_cluster(in_filename, out_filename, target, source,delete_timeout,error_
 def copy(index, target, source,crtfile_target,verify_cert_target,crtfile_source,verify_cert_source,transformations):
     es_source = get_es(source, crtfile_source, verify_cert_source)
     es_target = get_es(target, crtfile_target, verify_cert_target)
-    trans_list = transformations.split(",")
+    trans_list = []
+    if transformations is not None:
+        trans_list = transformations.split(",")
     copy_func(index, es_target, es_source,trans_list)
 
 
@@ -225,7 +229,9 @@ def copy_func(index, es_target, es_source,trans_list):
 @click.option('--transformations')
 def ingest(path, index, hosts, preserve_index, preserve_ids,crtfile,verify_cert,transformations):
     es_target = get_es(hosts,crtfile,verify_cert)
-    trans_list = transformations.split(",")
+    trans_list = []
+    if transformations is not None:
+        trans_list = transformations.split(",")
     ingest_func(path, index, es_target, preserve_index, preserve_ids,trans_list)
 
 
