@@ -79,6 +79,5 @@ Copy and copy-cluster also have certificate parameters, that work similarly to t
 
 `--verify-cert-source/--no-verify-cert-source`
 
-Ingest, Copy and copy cluster have a transformations parameter, supporting a comma-separated list
-of transformations. Currently available transformations:
-`boolean_lowercase` - turn True and False into 'true' and 'false'
+Ingest and copy cluster have an ingest-timeout parameter. Default is 10, bump it up when you're getting 
+timeouts while ingesting.
