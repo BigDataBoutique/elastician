@@ -13,6 +13,7 @@ import urllib3.exceptions
 from ssl import create_default_context
 from ssl import CERT_NONE
 import urllib3
+import re
 
 logging.basicConfig()
 logger = logging.getLogger()
@@ -25,7 +26,8 @@ def cli():
 ### dictionary and JSON helper functions
 def read_json_from_gzip_file(f):
     for line in f:
-        yield json.loads(line.decode(encoding='UTF-8'))
+        line = line.decode(encoding='UTF-8')
+        yield json.loads(line)
 
 
 def nested_replace( structure, transform_map ):
@@ -37,14 +39,15 @@ def nested_replace( structure, transform_map ):
                      for key, value in structure.items() }
 
     if structure in transform_map.keys():
-        return transform_map[structure]
+        return transform_map[str(structure)]
     else:
         return structure
 
 def apply_transformations(doc,trans_list):
     transform_map = {}
-    if 'boolean_lowercase' in trans_list:
-        transform_map.update({'True':'true','False':'false'})
+    # This transformation isn't currently helpful, but  is left as an example
+    # if 'boolean_lowercase' in trans_list:
+    #     transform_map.update({'True':'true','False':'false'})
     if transform_map:
         return nested_replace(doc,transform_map)
     else:
@@ -134,8 +137,9 @@ def dump_func(index, es_source, timeout):
 @click.option('--crtfile-source')
 @click.option('--verify-cert-source/--no-verify-cert-source', default=False)
 @click.option('--transformations')
+@click.option('--ingest-timeout')
 def copy_cluster(in_filename, out_filename, target, source,delete_timeout,error_on_timeout,preserve_index,preserve_ids,
-                 abort_on_failure,dump_timeout,crtfile_target,verify_cert_target,crtfile_source,verify_cert_source,transformations):
+                 abort_on_failure,dump_timeout,crtfile_target,verify_cert_target,crtfile_source,verify_cert_source,transformations,ingest_timeout):
     if target is None and source is None:
         click.echo(f'No relevant Elasticsearch instances', err=True)
         return
@@ -168,7 +172,7 @@ def copy_cluster(in_filename, out_filename, target, source,delete_timeout,error_
                 cur_index = None
                 if len(row) == 3:
                     cur_index = row[2]
-                ok = ingest_func(cur_file,cur_index,es_target,preserve_index,preserve_ids,trans_list)
+                ok = ingest_func(cur_file,cur_index,es_target,preserve_index,preserve_ids,trans_list,ingest_timeout)
             result_row = row
             if ok is False:
                 if abort_on_failure is True:
@@ -227,15 +231,16 @@ def copy_func(index, es_target, es_source,trans_list):
 @click.option('--crtfile')
 @click.option('--verify-cert/--no-verify-cert', default=False)
 @click.option('--transformations')
-def ingest(path, index, hosts, preserve_index, preserve_ids,crtfile,verify_cert,transformations):
+@click.option('--ingest-timeout')
+def ingest(path, index, hosts, preserve_index, preserve_ids,crtfile,verify_cert,transformations,ingest_timeout):
     es_target = get_es(hosts,crtfile,verify_cert)
     trans_list = []
     if transformations is not None:
         trans_list = transformations.split(",")
-    ingest_func(path, index, es_target, preserve_index, preserve_ids,trans_list)
+    ingest_func(path, index, es_target, preserve_index, preserve_ids,trans_list,ingest_timeout)
 
 
-def ingest_func(path, index, es_target, preserve_index, preserve_ids,trans_list):
+def ingest_func(path, index, es_target, preserve_index, preserve_ids,trans_list,ingest_timeout=10):
     with gzip.open(path, mode='rb') as f:
         type = get_target_type(es_target)
         #objs = [json.loads(line.decode(encoding='UTF-8')) for line in f]
@@ -244,7 +249,7 @@ def ingest_func(path, index, es_target, preserve_index, preserve_ids,trans_list)
             _type=type,
             _id=None if not preserve_ids else o['_id'],
             _op_type="index",
-            **(apply_transformations(o['_source'],trans_list))) for o in read_json_from_gzip_file(f)),max_chunk_bytes=10*1024*1024)
+            **(apply_transformations(o['_source'],trans_list))) for o in read_json_from_gzip_file(f)),max_chunk_bytes=10*1024*1024,request_timeout=ingest_timeout)
         for ok, response in it:
             if not ok:
                 click.echo(f'Error indexing to {index}: response is {response}', err=True)
