@@ -13,7 +13,8 @@ import urllib3.exceptions
 from ssl import create_default_context
 from ssl import CERT_NONE
 import urllib3
-import re
+from multiprocessing import Pool
+from functools import partial
 
 logging.basicConfig()
 logger = logging.getLogger()
@@ -59,15 +60,15 @@ def get_es_hosts(hosts):
     es_hosts = hosts or os.getenv('ES_HOSTS') or 'localhost:9200'
     return es_hosts.split(',')
 
-def get_es(hosts,crtfile,verify_cert):
+def get_es(hosts,crtfile,verify_cert, read_timeout=10):
     if crtfile is not None:
         context = create_default_context(cafile=crtfile)
         if not verify_cert:
             context.check_hostname = False
             context.verify_mode = CERT_NONE
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        return Elasticsearch(hosts=get_es_hosts(hosts),ssl_context=context)
-    return Elasticsearch(hosts=get_es_hosts(hosts))
+        return Elasticsearch(hosts=get_es_hosts(hosts),ssl_context=context, timeout=read_timeout)
+    return Elasticsearch(hosts=get_es_hosts(hosts), timeout=read_timeout)
 
 def get_target_type(es):
     version = (int)(es.info()['version']['number'][0])
@@ -99,16 +100,80 @@ def delete_func(index, es_source,timeout,error_on_timeout):
 @click.option('--timeout', default=u'1m')
 @click.option('--crtfile')
 @click.option('--verify-cert/--no-verify-cert', default=False)
-def dump(index, hosts, timeout,crtfile,verify_cert):
-    es_source = get_es(hosts,crtfile,verify_cert)
-    dump_func(index, es_source, timeout)
+@click.option('--size', default=1000)
+@click.option('--sliced/--no-sliced', default=False)
+#TODO organize timeouts across functions
+@click.option('--read-timeout', default=10)
+def dump(index, hosts, timeout,crtfile,verify_cert, size, sliced, read_timeout):
+    if sliced:
+        #TODO move get_es out of inner function in order to run it within copy_cluster
+        dump_func_slice(index, hosts, crtfile, verify_cert, timeout, size, read_timeout)
+    else:
+        es_source = get_es(hosts, crtfile, verify_cert, read_timeout)
+        dump_func(index, es_source, timeout, size)
+
+def get_shards_info(client, index):
+    shards_info = client.search_shards(index)
+    number_of_shards = len(shards_info['shards'])
+    nodes = dict([(k, v['transport_address'].split(':')[0]) for k, v in shards_info['nodes'].items()])
+
+    shards_info = {}
+    i = 0
+
+    while len(shards_info.keys()) < number_of_shards:
+        result = client.search_shards(index, routing=i)
+        shard = _get_primary_shard(result)
+
+        shard_number = shard['shard']
+        node = shard['node']
+        address = nodes[node]
+
+        if shard_number not in shards_info:
+            shards_info[shard_number] = address
+        i += 1
+
+    return shards_info
+
+def _get_primary_shard(search_shards_result):
+    shards = search_shards_result['shards'][0]
+    return [shard for shard in shards if shard['primary'] is True][0]
+
+def dump_slice(hosts, crtfile, verify_cert, index, size, timeout, read_timeout, slices, shard_info):
+    slice = shard_info[0]
+    es_source = get_es(hosts, crtfile, verify_cert, read_timeout)
+    query = {"slice": {"id": slice, "max": slices}}
+    with gzip.open(index + '_' + str(slice) + '_dump.jsonl.gz', mode='wb') as out:
+        try:
+            for d in tqdm(helpers.scan(es_source, index=index, query=query, size=size, scroll=timeout, raise_on_error=True,
+                                       preserve_order=False, request_timeout=read_timeout)):
+                out.write(("%s\n" % json.dumps({
+                    '_source': d['_source'],
+                    '_index': d['_index'],
+                    '_type': d['_type'],
+                    '_id': d['_id'],
+                }, ensure_ascii=False)).encode(encoding='UTF-8'))
+        except elasticsearch.exceptions.NotFoundError:
+            click.echo(f'Error dumping index {index}: Not Found', err=True)
+            return False
+    return True
 
 
-def dump_func(index, es_source, timeout):
+def dump_func_slice(index, hosts, crtfile, verify_cert, timeout, size, read_timeout):
+    es_source = get_es(hosts, crtfile, verify_cert, read_timeout)
+    info = get_shards_info(es_source, index)
+    if len(info.keys()) < 2:
+        dump_func(index,es_source,timeout,size)
+    else:
+        pool = Pool(len(info))
+        prod_x = partial(dump_slice, hosts, crtfile, verify_cert, index, size, timeout, read_timeout, len(info))
+        info_items = [(k, v) for k, v in info.items()]
+        pool.map(prod_x, info_items)
+
+def dump_func(index, es_source, timeout, size):
     with gzip.open(index + '_dump.jsonl.gz', mode='wb') as out:
         try:
             for d in tqdm(helpers.scan(es_source, index=index,
-                                       scroll=timeout, raise_on_error=True, preserve_order=False)):
+                                       scroll=timeout, raise_on_error=True, preserve_order=False, size=size)):
                 out.write(("%s\n" % json.dumps({
                     '_source': d['_source'],
                     '_index': d['_index'],
@@ -138,8 +203,9 @@ def dump_func(index, es_source, timeout):
 @click.option('--verify-cert-source/--no-verify-cert-source', default=False)
 @click.option('--transformations')
 @click.option('--ingest-timeout')
+@click.option('--size', default=1000)
 def copy_cluster(in_filename, out_filename, target, source,delete_timeout,error_on_timeout,preserve_index,preserve_ids,
-                 abort_on_failure,dump_timeout,crtfile_target,verify_cert_target,crtfile_source,verify_cert_source,transformations,ingest_timeout):
+                 abort_on_failure,dump_timeout,crtfile_target,verify_cert_target,crtfile_source,verify_cert_source,transformations,ingest_timeout,size):
     if target is None and source is None:
         click.echo(f'No relevant Elasticsearch instances', err=True)
         return
@@ -163,7 +229,7 @@ def copy_cluster(in_filename, out_filename, target, source,delete_timeout,error_
                 if cur_op == "copy":
                     ok = copy_func(cur_index, es_target, es_source,trans_list)
                 elif cur_op == "dump":
-                    ok = dump_func(cur_index, es_source,dump_timeout)
+                    ok = dump_func(cur_index, es_source,dump_timeout,size)
             elif cur_op == "delete":
                 cur_index = row[1]
                 ok = delete_func(cur_index, es_source,delete_timeout,error_on_timeout)

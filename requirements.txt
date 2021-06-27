@@ -1,5 +1,5 @@
 click==7.1.1
-elasticsearch==7.9.1
+elasticsearch==7.11.0
 tqdm==4.43.0
 
 urllib3~=1.25.10

@@ -69,6 +69,8 @@ Other parameters for copy-cluster:
 
 `--preserve-index/--no-preserve-index` - whether the index saved in the dumps should be used during ingest
 
+Dump also has a read-timeout parameter which determines request timeout (as opposed to scroll timeout).
+
 Copy and copy-cluster also have certificate parameters, that work similarly to those above:
 
 `--crtfile-target`
@@ -81,3 +83,7 @@ Copy and copy-cluster also have certificate parameters, that work similarly to t
 
 Ingest and copy cluster have an ingest-timeout parameter. Default is 10, bump it up when you're getting 
 timeouts while ingesting.
+
+Dump's --sliced parameter allows dumping using a sliced scroll. Not yet added into copy cluster.
+
+The --size parameter for dump and copy-cluster determines the bulk size
