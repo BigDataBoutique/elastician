@@ -202,7 +202,7 @@ def dump_func(index, es_source, timeout, size):
 @click.option('--crtfile-source')
 @click.option('--verify-cert-source/--no-verify-cert-source', default=False)
 @click.option('--transformations')
-@click.option('--ingest-timeout')
+@click.option('--ingest-timeout', default=10)
 @click.option('--size', default=1000)
 def copy_cluster(in_filename, out_filename, target, source,delete_timeout,error_on_timeout,preserve_index,preserve_ids,
                  abort_on_failure,dump_timeout,crtfile_target,verify_cert_target,crtfile_source,verify_cert_source,transformations,ingest_timeout,size):
@@ -297,7 +297,7 @@ def copy_func(index, es_target, es_source,trans_list):
 @click.option('--crtfile')
 @click.option('--verify-cert/--no-verify-cert', default=False)
 @click.option('--transformations')
-@click.option('--ingest-timeout')
+@click.option('--ingest-timeout', default=10)
 def ingest(path, index, hosts, preserve_index, preserve_ids,crtfile,verify_cert,transformations,ingest_timeout):
     es_target = get_es(hosts,crtfile,verify_cert)
     trans_list = []
