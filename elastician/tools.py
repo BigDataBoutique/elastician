@@ -184,7 +184,10 @@ def dump_func_slice(index, hosts, username, pwd, crtfile, verify_cert, timeout, 
 
 
 def dump_func(index, es_source, timeout, size):
-    with gzip.open(index + '_dump.jsonl.gz', mode='wb') as out:
+    file_name = index.replace('.', '_') + '_dump.jsonl.gz'
+    logger.info(f'Dumping {index} to {file_name}')
+    with gzip.open(file_name, mode='wb') as out:
+        counter = 0
         try:
             for d in tqdm(helpers.scan(es_source, index=index,
                                        scroll=timeout, raise_on_error=True, preserve_order=False, size=size)):
@@ -194,6 +197,9 @@ def dump_func(index, es_source, timeout, size):
                     '_type': d['_type'],
                     '_id': d['_id'],
                 }, ensure_ascii=False)).encode(encoding='UTF-8'))
+                counter += 1
+                if counter % 1000 == 0:
+                    out.flush()
         except elasticsearch.exceptions.NotFoundError:
             click.echo(f'Error dumping index {index}: Not Found', err=True)
             return False
@@ -318,7 +324,8 @@ def copy_func(index, es_target, es_source, trans_list):
 @click.option('--verify-cert/--no-verify-cert', default=False)
 @click.option('--transformations')
 @click.option('--ingest-timeout', default=10)
-def ingest(path, index, hosts, username, pwd, preserve_index, preserve_ids, crtfile, verify_cert, transformations, ingest_timeout):
+def ingest(path, index, hosts, username, pwd, preserve_index, preserve_ids, crtfile, verify_cert, transformations,
+           ingest_timeout):
     es_target = get_es(hosts, username, pwd, crtfile, verify_cert)
     trans_list = []
     if transformations is not None:
