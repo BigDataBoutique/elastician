@@ -114,13 +114,21 @@ def delete_func(index, es_source, timeout, error_on_timeout):
 # TODO organize timeouts across functions
 @click.option('--read-timeout', default=10)
 @click.option('--query', default=None)
-def dump(index, hosts, username, pwd, timeout, crtfile, verify_cert, size, sliced, read_timeout, query):
+@click.option('--sort', default=None)
+def dump(index, hosts, username, pwd, timeout, crtfile, verify_cert, size, sliced, read_timeout, query, sort):
+    if sort:
+        sort = sort.split(':')
+        if not sort:
+            sort = None
+        if len(sort) == 1:
+            sort[1] = 'desc'
+
     if sliced:
         # TODO move get_es out of inner function in order to run it within copy_cluster
-        dump_func_slice(index, hosts, username, pwd, crtfile, verify_cert, timeout, size, read_timeout, query)
+        dump_func_slice(index, hosts, username, pwd, crtfile, verify_cert, timeout, size, read_timeout, query, sort)
     else:
         es_source = get_es(hosts, username, pwd, crtfile, verify_cert, read_timeout)
-        dump_func(index, es_source, timeout, size, query)
+        dump_func(index, es_source, timeout, size, query, sort)
 
 
 def get_shards_info(client, index):
@@ -151,7 +159,7 @@ def _get_primary_shard(search_shards_result):
     return [shard for shard in shards if shard['primary'] is True][0]
 
 
-def dump_slice(hosts, username, pwd, crtfile, verify_cert, index, size, timeout, read_timeout, slices, q, shard_info):
+def dump_slice(hosts, username, pwd, crtfile, verify_cert, index, size, timeout, read_timeout, slices, q, sort, shard_info):
     slice = shard_info[0]
     es_source = get_es(hosts, username, pwd, crtfile, verify_cert, read_timeout)
     query = {"slice": {"id": slice, "max": slices}}
@@ -175,19 +183,20 @@ def dump_slice(hosts, username, pwd, crtfile, verify_cert, index, size, timeout,
     return True
 
 
-def dump_func_slice(index, hosts, username, pwd, crtfile, verify_cert, timeout, size, read_timeout, query):
+def dump_func_slice(index, hosts, username, pwd, crtfile, verify_cert, timeout, size, read_timeout, query, sort):
     es_source = get_es(hosts, username, pwd, crtfile, verify_cert, read_timeout)
     info = get_shards_info(es_source, index)
     if len(info.keys()) < 2:
-        dump_func(index, es_source, timeout, size, query)
+        dump_func(index, es_source, timeout, size, query, sort)
     else:
         pool = Pool(len(info))
-        prod_x = partial(dump_slice, hosts, username, pwd, crtfile, verify_cert, index, size, timeout, read_timeout, query, len(info))
+        prod_x = partial(dump_slice, hosts, username, pwd, crtfile, verify_cert, index, size, timeout, read_timeout,
+                         query, sort, len(info))
         info_items = [(k, v) for k, v in info.items()]
         pool.map(prod_x, info_items)
 
 
-def dump_func(index, es_source, timeout, size, query):
+def dump_func(index, es_source, timeout, size, query, sort):
     file_name = index.replace('.', '_') + '_dump.jsonl.gz'
     logger.info(f'Dumping {index} to {file_name}')
 
@@ -198,7 +207,7 @@ def dump_func(index, es_source, timeout, size, query):
     with gzip.open(file_name, mode='wb') as out:
         counter = 0
         try:
-            for d in tqdm(helpers.scan(es_source, index=index, query=q,
+            for d in tqdm(helpers.scan(es_source, index=index, query=q, sort={sort[0]: sort[1]},
                                        scroll=timeout, raise_on_error=True, preserve_order=False, size=size)):
                 out.write(("%s\n" % json.dumps({
                     '_source': d['_source'],
@@ -260,7 +269,7 @@ def copy_cluster(in_filename, out_filename, target, source, delete_timeout, erro
                 if cur_op == "copy":
                     ok = copy_func(cur_index, es_target, es_source, trans_list)
                 elif cur_op == "dump":
-                    ok = dump_func(cur_index, es_source, dump_timeout, size, None)
+                    ok = dump_func(cur_index, es_source, dump_timeout, size, None, '')
             elif cur_op == "delete":
                 cur_index = row[1]
                 ok = delete_func(cur_index, es_source, delete_timeout, error_on_timeout)
