@@ -64,12 +64,13 @@ def get_es_hosts(hosts):
 
 
 def get_es(hosts, username, pwd, crtfile, verify_cert, read_timeout=10):
+    if not verify_cert:
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     if crtfile is not None:
         context = create_default_context(cafile=crtfile)
         if not verify_cert:
             context.check_hostname = False
             context.verify_mode = CERT_NONE
-            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         return Elasticsearch(hosts=get_es_hosts(hosts), ssl_context=context, timeout=read_timeout)
     if username and pwd:
         return Elasticsearch(hosts=get_es_hosts(hosts),
